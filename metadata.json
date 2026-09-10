@@ -1,0 +1,6 @@
+{
+  "name": "Gestão Estratégica",
+  "description": "Plataforma de monitoramento, indicadores, linha do tempo e prestação de contas da Coordenadoria de Inovações e Culturas Digitais de Crateús.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
