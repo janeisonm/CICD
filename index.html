@@ -9,8 +9,68 @@
     <meta property="og:description" content="Plataforma de monitoramento, indicadores, linha do tempo e prestação de contas da Coordenadoria de Inovações e Culturas Digitais de Crateús." />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <noscript>
+        <div style="font-family: sans-serif; padding: 40px; text-align: center; color: #334155;">
+          <h2>JavaScript Necessário</h2>
+          <p>Por favor, ative o JavaScript no seu navegador para utilizar a Gestão Estratégica.</p>
+        </div>
+      </noscript>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Verificação automática se a aplicação carregou ou se o index.html foi aberto diretamente/sem build
+      setTimeout(function() {
+        var root = document.getElementById('root');
+        if (root && root.children.length === 0) {
+          // Tenta redirecionar para a pasta docs/ se existir (deploy via branch /docs)
+          if (location.pathname.indexOf('/docs/') === -1 && location.protocol !== 'file:') {
+            var docsUrl = location.pathname.replace(/\/$/, '') + '/docs/';
+            fetch(docsUrl, { method: 'HEAD' })
+              .then(function(res) {
+                if (res.ok) {
+                  window.location.replace(docsUrl);
+                } else {
+                  showHelp();
+                }
+              })
+              .catch(function() {
+                showHelp();
+              });
+          } else {
+            showHelp();
+          }
+
+          function showHelp() {
+            root.innerHTML = `
+              <div style="min-height: 100vh; background: #020617; color: #f8fafc; display: flex; align-items: center; justify-content: center; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px;">
+                <div style="max-width: 580px; background: #0f172a; border: 1px solid #334155; border-radius: 24px; padding: 36px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+                  <div style="width: 56px; height: 56px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                  </div>
+                  <h2 style="font-size: 20px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Publicação no GitHub Pages</h2>
+                  <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 20px;">
+                    Este é um projeto moderno em <strong>React + Vite</strong>. No GitHub Pages, ele precisa ser publicado com a compilação gerada (pasta <code>dist</code> ou <code>docs</code>) e não com o arquivo fonte TypeScript.
+                  </p>
+                  <div style="background: #020617; border: 1px solid #1e293b; border-radius: 16px; padding: 18px; text-align: left; font-size: 12px; color: #cbd5e1; margin-bottom: 20px; line-height: 1.8;">
+                    <strong style="color: #10b981; display: block; margin-bottom: 8px;">Como publicar no GitHub Pages com 1 clique:</strong>
+                    <strong>Opção 1 (Recomendada - Automática):</strong><br/>
+                    1. No repositório do GitHub, vá em <strong>Settings</strong> &gt; <strong>Pages</strong>.<br/>
+                    2. Em <strong>Build and deployment &gt; Source</strong>, selecione <strong>"GitHub Actions"</strong>.<br/>
+                    <em>(O arquivo de deploy automático já foi criado no repositório em <code>.github/workflows/deploy.yml</code> e fará tudo sozinho!)</em><br/><br/>
+                    <strong>Opção 2 (Via branch):</strong><br/>
+                    1. Em <strong>Settings</strong> &gt; <strong>Pages</strong> &gt; <strong>Branch</strong>, selecione a pasta <strong><code>/docs</code></strong> em vez de <code>/ (root)</code>.
+                  </div>
+                  <div style="font-size: 11px; color: #64748b;">
+                    Se estiver testando no computador, utilize o terminal com <code>npm run dev</code> ou <code>npx serve dist</code>.
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        }
+      }, 1500);
+    </script>
   </body>
 </html>
 
