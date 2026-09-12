@@ -51,6 +51,18 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Erro no login com Google Drive:', error);
+    if (error.code === 'auth/unauthorized-domain') {
+      const currentHost = window.location.hostname;
+      throw new Error(
+        `Domínio não autorizado pelo Firebase (${currentHost}). ` +
+        `Para usar a Google no GitHub Pages, acesse o Console do Firebase (Authentication > Configurações > Domínios Autorizados) ` +
+        `e adicione "${currentHost}". Enquanto isso, utilize o Backup Local em Arquivo JSON ou a Sincronização com o GitHub!`
+      );
+    } else if (error.code === 'auth/popup-blocked') {
+      throw new Error('O navegador bloqueou a janela pop-up do Google. Por favor, libere os pop-ups para este site.');
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('A janela de login do Google foi fechada antes da confirmação.');
+    }
     throw error;
   } finally {
     isSigningIn = false;

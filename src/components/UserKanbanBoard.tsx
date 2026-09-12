@@ -89,17 +89,15 @@ export const UserKanbanBoard: React.FC = () => {
 
     // User Filter
     if (selectedUserFilter !== 'all') {
-      if (selectedUserFilter === 'my_actions') {
-        const matchesName = act.responsible?.toLowerCase().includes((currentUser?.name || '').toLowerCase());
-        const matchesEmail = act.responsible?.toLowerCase() === currentUser?.email?.toLowerCase();
-        if (!matchesName && !matchesEmail) return false;
-      } else {
-        const targetUser = teamUsers.find(u => u.id === selectedUserFilter);
-        if (targetUser) {
-          const matchesName = act.responsible?.toLowerCase().includes(targetUser.name.toLowerCase());
-          const matchesEmail = act.responsible?.toLowerCase() === targetUser.email.toLowerCase();
-          if (!matchesName && !matchesEmail) return false;
-        }
+      const targetUser = selectedUserFilter === 'my_actions'
+        ? currentUser
+        : (teamUsers.find(u => u.id === selectedUserFilter) || currentUser);
+
+      if (targetUser) {
+        const matchesId = !!(act.responsibleId && act.responsibleId === targetUser.id);
+        const matchesName = !!(act.responsible && act.responsible.toLowerCase().includes(targetUser.name.toLowerCase()));
+        const matchesEmail = !!(targetUser.email && act.responsible && act.responsible.toLowerCase() === targetUser.email.toLowerCase());
+        if (!matchesId && !matchesName && !matchesEmail) return false;
       }
     }
 
@@ -245,6 +243,9 @@ export const UserKanbanBoard: React.FC = () => {
         completed: false
       }));
 
+    const targetResponsibleName = isAdmin ? (newResponsible.trim() || currentUser?.name || 'Equipe CICD') : (currentUser?.name || 'Servidor');
+    const targetUserObj = teamUsers.find(u => u.name.toLowerCase() === targetResponsibleName.toLowerCase() || u.email.toLowerCase() === targetResponsibleName.toLowerCase());
+
     const actionData: Omit<WorkPlanAction, 'id'> = {
       goalId: newGoalId,
       title: newTitle.trim(),
@@ -256,7 +257,8 @@ export const UserKanbanBoard: React.FC = () => {
       microactionsCount: microactionsList.length || 3,
       microactionsCompleted: 0,
       microactionsList: microactionsList.length > 0 ? microactionsList : undefined,
-      responsible: newResponsible.trim() || currentUser?.name || 'Equipe CICD',
+      responsible: targetResponsibleName,
+      responsibleId: targetUserObj?.id || currentUser?.id,
       impactScore: Number(newImpactScore) || 7
     };
 

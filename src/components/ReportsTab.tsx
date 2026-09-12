@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { useStrategicState } from '../stateContext';
 import { 
   Calendar, Download, FileSpreadsheet, 
-  FileText, ListOrdered, Printer, RefreshCw, Star 
+  FileText, ListOrdered, Printer, RefreshCw, Star,
+  User, CheckCircle2, Clock, AlertTriangle, ShieldCheck, Award, TrendingUp, CheckSquare, Layers
 } from 'lucide-react';
 
 export const ReportsTab: React.FC = () => {
   const context = useStrategicState();
-  const { state: appState } = context;
+  const { state: appState, currentUser } = context;
 
-  const [selectedReportType, setSelectedReportType] = useState<'executive' | 'monthly' | 'school' | 'project' | 'indicators'>('executive');
+  const [selectedReportType, setSelectedReportType] = useState<'executive' | 'monthly' | 'school' | 'project' | 'indicators' | 'user'>('executive');
   
   const coordinatorName = appState.systemSettings?.coordinatorName || 'Prof. Francisco Reginaldo';
   const coordinatorRole = appState.systemSettings?.coordinatorRole || 'Coordenador de Inovação e Culturas Digitais';
@@ -17,10 +18,12 @@ export const ReportsTab: React.FC = () => {
 
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>(appState.schools[0]?.id || '');
   const [selectedProjectId, setSelectedProjectId] = useState<string>(appState.projects[0]?.id || '');
+  const [selectedUserId, setSelectedUserId] = useState<string>(currentUser?.id || appState.teamUsers?.[0]?.id || '');
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
 
   const selectedSchool = appState.schools.find(s => s.id === selectedSchoolId) || appState.schools[0];
   const selectedProject = appState.projects.find(p => p.id === selectedProjectId) || appState.projects[0];
+  const targetUser = (appState.teamUsers || []).find(u => u.id === selectedUserId) || currentUser || appState.teamUsers?.[0];
 
   // Helper calculations for reports
   const totalSchools = appState.schools.length;
@@ -52,13 +55,40 @@ export const ReportsTab: React.FC = () => {
   const completedGoalsList = appState.goals.filter(g => g.status === 'concluido' || (g.actions && g.actions.length > 0 && g.actions.every(a => a.completionPercent === 100)));
   const pendingGoalsList = appState.goals.filter(g => g.status !== 'concluido' && (g.actions.length === 0 || !g.actions.every(a => a.completionPercent === 100)));
 
-  // TRIGGER SIMULATED DOWNLOADS
+  // User Actions Calculation
+  const userActionItems: Array<{ goal: any; action: any }> = [];
+  appState.goals.forEach(g => {
+    (g.actions || []).forEach(a => {
+      const matchId = !!(a.responsibleId && targetUser && a.responsibleId === targetUser.id);
+      const matchName = !!(targetUser?.name && a.responsible && a.responsible.toLowerCase().includes(targetUser.name.toLowerCase()));
+      const matchEmail = !!(targetUser?.email && a.responsible && a.responsible.toLowerCase() === targetUser.email.toLowerCase());
+      if (matchId || matchName || matchEmail) {
+        userActionItems.push({ goal: g, action: a });
+      }
+    });
+  });
+
+  const totalUserActions = userActionItems.length;
+  const completedUserActions = userActionItems.filter(i => i.action.completionPercent >= 100 || i.action.status === 'concluido');
+  const inProgressUserActions = userActionItems.filter(i => (i.action.completionPercent > 0 && i.action.completionPercent < 100) && i.action.status !== 'atrasado');
+  const overdueUserActions = userActionItems.filter(i => i.action.status === 'atrasado' || (i.action.completionPercent < 100 && i.action.dueDate < '2026-08-04'));
+  const userAvgProgress = totalUserActions > 0
+    ? Math.round(userActionItems.reduce((acc, i) => acc + (i.action.completionPercent || 0), 0) / totalUserActions)
+    : 0;
+
+  const userVisits = appState.visits.filter(v => 
+    v.responsibleTechnician && targetUser?.name && (
+      v.responsibleTechnician.toLowerCase().includes(targetUser.name.toLowerCase()) ||
+      (targetUser.email && v.responsibleTechnician.toLowerCase() === targetUser.email.toLowerCase())
+    )
+  );
+
+  // TRIGGER REAL DOWNLOADS
   const handleDownload = (format: 'pdf' | 'excel' | 'word') => {
     setIsDownloading(format);
     setTimeout(() => {
       setIsDownloading(null);
       
-      // Build a realistic file content
       let filename = `relatorio_${selectedReportType}_${Date.now()}`;
       let mimeType = 'text/plain';
       let content = '';
@@ -67,13 +97,39 @@ export const ReportsTab: React.FC = () => {
         window.print();
         return;
       } else if (format === 'excel') {
-        filename += '.xlsx';
-        mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        content = 'ID,Nome,Informacoes,Indicadores\n1,Relatorio Crateus,' + selectedReportType + ',100%';
+        filename = selectedReportType === 'user' && targetUser 
+          ? `relatorio_individual_${targetUser.name.replace(/\s+/g, '_')}.csv` 
+          : `relatorio_${selectedReportType}.csv`;
+        mimeType = 'text/csv;charset=utf-8;';
+
+        if (selectedReportType === 'user' && targetUser) {
+          content = '\ufeff"Ação Operacional","Meta Associada","Início","Prazo","Status","Progresso (%)","Responsável"\n' +
+            userActionItems.map(i => 
+              `"${i.action.title.replace(/"/g, '""')}","${i.goal.title.replace(/"/g, '""')}","${i.action.startDate}","${i.action.dueDate}","${i.action.status}","${i.action.completionPercent}%","${targetUser.name}"`
+            ).join('\n');
+        } else {
+          content = '\ufeff"Item","Detalhes","Status"\n"Relatório Crateús","' + selectedReportType + '","100%"';
+        }
       } else if (format === 'word') {
-        filename += '.docx';
-        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        content = 'RELATORIO DE GESTAO ESTRATEGICA - CRATEUS\n' + selectedReportType.toUpperCase();
+        filename = selectedReportType === 'user' && targetUser
+          ? `relatorio_individual_${targetUser.name.replace(/\s+/g, '_')}.doc`
+          : `relatorio_${selectedReportType}.doc`;
+        mimeType = 'application/msword;charset=utf-8;';
+
+        if (selectedReportType === 'user' && targetUser) {
+          content = `RELATÓRIO INDIVIDUAL DE AÇÕES E ENTREGAS - SME CRATEÚS\n` +
+            `SERVIDOR / MEMBRO: ${targetUser.name}\n` +
+            `CARGO / FUNÇÃO: ${targetUser.roleTitle}\n` +
+            `E-MAIL: ${targetUser.email}\n` +
+            `ÍNDICE DE EVOLUÇÃO INDIVIDUAL: ${userAvgProgress}%\n` +
+            `TOTAL DE AÇÕES: ${totalUserActions} | CONCLUÍDAS: ${completedUserActions.length} | EM ANDAMENTO: ${inProgressUserActions.length}\n\n` +
+            `AÇÕES DESIGNADAS:\n` +
+            userActionItems.map((item, idx) => 
+              `${idx + 1}. ${item.action.title} [${item.action.completionPercent}% - ${item.action.status.toUpperCase()}]\n   Meta: ${item.goal.title}\n   Período: ${item.action.startDate} até ${item.action.dueDate}`
+            ).join('\n\n');
+        } else {
+          content = 'RELATORIO DE GESTAO ESTRATEGICA - CRATEUS\n' + selectedReportType.toUpperCase();
+        }
       }
 
       // Download trigger
@@ -86,7 +142,7 @@ export const ReportsTab: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-    }, 1500);
+    }, 1200);
   };
 
   return (
@@ -113,6 +169,7 @@ export const ReportsTab: React.FC = () => {
               id="select-report-type"
             >
               <option value="executive">Relatório Executivo (Secretária)</option>
+              <option value="user">Relatório Individual por Usuário / Membro</option>
               <option value="monthly">Relatório Mensal Operacional</option>
               <option value="school">Relatório por Escola</option>
               <option value="project">Relatório por Projeto</option>
@@ -121,6 +178,23 @@ export const ReportsTab: React.FC = () => {
           </div>
 
           {/* Sub selections */}
+          {selectedReportType === 'user' && (
+            <div className="flex flex-col min-w-[200px]">
+              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Selecionar Usuário / Membro</label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20"
+                id="select-report-user"
+              >
+                {appState.teamUsers.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role === 'administrador' ? 'Admin' : 'Membro'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {selectedReportType === 'school' && (
             <div className="flex flex-col min-w-[180px]">
               <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Selecionar Escola</label>
@@ -883,6 +957,216 @@ export const ReportsTab: React.FC = () => {
                     ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 6. RELATÓRIO INDIVIDUAL DO USUÁRIO / MEMBRO */}
+          {/* ========================================================= */}
+          {selectedReportType === 'user' && targetUser && (
+            <div className="space-y-8 animate-fade-in" id="report-user-view">
+              
+              {/* Institutional Header */}
+              <div className="border-b-4 border-emerald-600 pb-8 text-center sm:text-left">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo Coordenadoria" className="h-12 w-auto object-contain p-1 border border-slate-200 rounded-xl bg-slate-50" />
+                    ) : (
+                      <div className="w-10 h-10 bg-emerald-800 text-white font-black rounded-xl flex items-center justify-center text-lg">C</div>
+                    )}
+                    <div className="text-[10px] font-extrabold text-slate-500 tracking-widest uppercase text-left">
+                      Secretaria Municipal de Educação de Crateús <br />
+                      <span className="text-emerald-700 font-extrabold">{coordinatorRole}</span>
+                    </div>
+                  </div>
+                  <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3.5 py-1 rounded-full text-xs font-mono font-bold">
+                    PLANO ESTRATÉGICO 2025–2028
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-2 bg-emerald-100/80 text-emerald-900 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider mb-2 border border-emerald-300">
+                  <User className="h-3.5 w-3.5 text-emerald-700" /> Relatório Individual de Desempenho Operacional
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight uppercase">
+                  AÇÕES E ENTREGAS DO SERVIDOR
+                </h1>
+
+                {/* Member Identification Card */}
+                <div className="mt-5 p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-left">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Servidor Responsável</span>
+                    <strong className="text-sm font-extrabold text-slate-900 block truncate">{targetUser.name}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Cargo / Função</span>
+                    <span className="text-xs font-bold text-slate-700 block truncate">{targetUser.roleTitle || 'Técnico Educacional'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">E-mail Institucional</span>
+                    <span className="text-xs font-mono text-slate-600 block truncate">{targetUser.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Nível de Acesso</span>
+                    <span className="text-xs font-bold text-emerald-700 block uppercase">
+                      {targetUser.role === 'administrador' ? 'Administrador do Sistema' : 'Membro Operacional'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Individual Performance Metrics */}
+              <div>
+                <h3 className="text-xs font-extrabold text-slate-950 uppercase tracking-widest border-l-4 border-emerald-600 pl-3 mb-3">
+                  1. Quadro de Produtividade Individual
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total de Ações</span>
+                    <strong className="text-2xl font-black text-slate-800">{totalUserActions}</strong>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Concluídas</span>
+                    <strong className="text-2xl font-black text-emerald-700">{completedUserActions.length}</strong>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-center">
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">Em Andamento</span>
+                    <strong className="text-2xl font-black text-blue-700">{inProgressUserActions.length}</strong>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-emerald-900 text-white text-center shadow-sm">
+                    <span className="text-[10px] font-bold text-emerald-200 uppercase tracking-wider block">Evolução Média</span>
+                    <strong className="text-2xl font-black text-white">{userAvgProgress}%</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Actions Table */}
+              <div>
+                <h3 className="text-xs font-extrabold text-slate-950 uppercase tracking-widest border-l-4 border-emerald-600 pl-3 mb-3">
+                  2. Ações Operacionais Sob Responsabilidade do Usuário
+                </h3>
+
+                {userActionItems.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs font-medium">
+                    Nenhuma ação específica encontrada atribuída a <strong>{targetUser.name}</strong> no plano de trabalho no momento.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-600 uppercase text-[9px] tracking-wider font-extrabold border-b border-slate-200">
+                          <th className="p-3">Ação / Entrega</th>
+                          <th className="p-3">Meta Associada</th>
+                          <th className="p-3 text-center">Início</th>
+                          <th className="p-3 text-center">Prazo Limite</th>
+                          <th className="p-3 text-center">Situação</th>
+                          <th className="p-3 text-right">Progresso</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {userActionItems.map(({ goal, action }, idx) => {
+                          const isDone = action.completionPercent >= 100 || action.status === 'concluido';
+                          const isOverdue = action.status === 'atrasado';
+                          return (
+                            <tr key={action.id || idx} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="p-3">
+                                <div className="font-bold text-slate-900">{action.title}</div>
+                                {action.microactionsList && action.microactionsList.length > 0 && (
+                                  <div className="text-[10px] text-slate-500 mt-0.5">
+                                    {action.microactionsList.filter((m: any) => m.completed).length} de {action.microactionsList.length} microetapas cumpridas
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-600 text-[11px] max-w-[160px] truncate font-medium">
+                                {goal.title}
+                              </td>
+                              <td className="p-3 text-center font-mono text-[11px] text-slate-500">
+                                {action.startDate || '—'}
+                              </td>
+                              <td className="p-3 text-center font-mono text-[11px] text-slate-700 font-semibold">
+                                {action.dueDate || '—'}
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider ${
+                                  isDone ? 'bg-emerald-100 text-emerald-800' :
+                                  isOverdue ? 'bg-rose-100 text-rose-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {isDone ? 'Concluído' : isOverdue ? 'Atrasado' : 'Em Execução'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono font-bold">
+                                <span className={isDone ? 'text-emerald-700 font-extrabold' : 'text-slate-800'}>
+                                  {action.completionPercent}%
+                                </span>
+                                <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1 ml-auto">
+                                  <div 
+                                    className={`h-full ${isDone ? 'bg-emerald-600' : 'bg-blue-600'}`} 
+                                    style={{ width: `${Math.min(100, action.completionPercent)}%` }} 
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* User Field Visits / Technical Support */}
+              {userVisits.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-extrabold text-slate-955 uppercase tracking-widest border-l-4 border-emerald-600 pl-3 mb-3">
+                    3. Atendimentos e Visitas Técnicas Executadas
+                  </h3>
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-600 uppercase text-[9px] tracking-wider font-extrabold border-b border-slate-200">
+                          <th className="p-3">Data</th>
+                          <th className="p-3">Escola Atendida</th>
+                          <th className="p-3">Diagnóstico / Ações Realizadas</th>
+                          <th className="p-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {userVisits.map(v => (
+                          <tr key={v.id}>
+                            <td className="p-3 font-mono text-[11px] text-slate-500 font-semibold">{v.date}</td>
+                            <td className="p-3 font-bold text-slate-800">{v.schoolName}</td>
+                            <td className="p-3 text-slate-600 text-[11px] leading-relaxed">{v.diagnosisSummary || v.actionsTaken || 'Manutenção e suporte pedagógico'}</td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-100 text-emerald-800">
+                                {v.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Signatures and Homologation Block */}
+              <div className="mt-12 pt-8 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-8 text-center">
+                <div className="space-y-1">
+                  <div className="border-b border-slate-400 w-48 sm:w-64 mx-auto mb-2"></div>
+                  <strong className="text-xs text-slate-900 block font-extrabold uppercase">{targetUser.name}</strong>
+                  <span className="text-[10px] text-slate-500 block">{targetUser.roleTitle || 'Servidor Responsável'}</span>
+                  <span className="text-[9px] text-slate-400 font-mono block">Prestação de Contas Homologada</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="border-b border-slate-400 w-48 sm:w-64 mx-auto mb-2"></div>
+                  <strong className="text-xs text-slate-900 block font-extrabold uppercase">{coordinatorName}</strong>
+                  <span className="text-[10px] text-slate-500 block">{coordinatorRole}</span>
+                  <span className="text-[9px] text-slate-400 font-mono block">Visto da Coordenação SME</span>
+                </div>
+              </div>
+
             </div>
           )}
 

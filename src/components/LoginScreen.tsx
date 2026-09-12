@@ -29,7 +29,15 @@ export const LoginScreen: React.FC = () => {
 
   const handleQuickLogin = (userId: string) => {
     setErrorMsg(null);
-    setCurrentUserId(userId);
+    const target = teamUsers.find(u => u.id === userId);
+    if (target) {
+      setEmailOrName(target.email);
+      setPassword(target.password || 'Crateus@123');
+      const res = loginWithPassword(target.email, target.password || 'Crateus@123');
+      if (!res.success) {
+        setErrorMsg(res.message || 'Erro ao autenticar usuário.');
+      }
+    }
   };
 
   return (

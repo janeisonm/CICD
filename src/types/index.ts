@@ -47,6 +47,7 @@ export interface WorkPlanAction {
   microactionsCompleted: number;
   microactionsList?: { id: string; title: string; completed: boolean }[];
   responsible: string;
+  responsibleId?: string;
   impactScore: number; // 1 to 10
 }
 
@@ -139,6 +140,17 @@ export interface TeamUser {
   createdAt: string;
 }
 
+export interface GitHubConfig {
+  repo?: string; // ex: "usuario/repositorio"
+  token?: string; // GitHub Personal Access Token (PAT)
+  branch?: string; // ex: "main" ou "master"
+  path?: string; // ex: "data/database.json"
+  gistId?: string; // ID do Gist opcional
+  autoSync?: boolean;
+  lastSync?: string;
+  lastStatus?: 'success' | 'error' | 'syncing';
+}
+
 export interface StrategicState {
   schools: School[];
   goals: WorkPlanGoal[];
@@ -152,4 +164,5 @@ export interface StrategicState {
   activeTab: 'dashboard' | 'timeline' | 'pending' | 'achieved' | 'reports' | 'manage';
   activeSubTab?: string;
   systemSettings?: SystemSettings;
+  githubConfig?: GitHubConfig;
 }

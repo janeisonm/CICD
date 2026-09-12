@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { School, WorkPlanGoal, WorkPlanAction, Project, TechnicalVisit, Formation, ScienceFair, StrategicState, SystemSettings, TeamUser } from '../types';
+import { School, WorkPlanGoal, WorkPlanAction, Project, TechnicalVisit, Formation, ScienceFair, StrategicState, SystemSettings, TeamUser, GitHubConfig } from '../types';
 import { initialSchools, initialGoals, initialProjects, initialVisits, initialFormations, initialFairs, initialTeamUsers } from '../data/initialData';
 import { User } from 'firebase/auth';
 import { initAuth, googleSignIn, logoutGoogle, saveToGoogleDrive, loadFromGoogleDrive, searchBackupFile } from '../services/googleDriveService';
+import { saveStateToGitHub, loadStateFromGitHub, downloadLocalJsonBackup, readJsonBackupFile } from '../services/githubStorageService';
 
 const defaultSystemSettings: SystemSettings = {
   logoUrl: '',
@@ -64,6 +65,13 @@ interface StateContextType {
   disconnectFromDrive: () => Promise<void>;
   saveToDriveNow: (silent?: boolean) => Promise<boolean>;
   loadFromDriveNow: () => Promise<boolean>;
+  // GitHub & Local Database Persistence
+  isSyncingGitHub: boolean;
+  updateGitHubConfig: (config: Partial<GitHubConfig>) => void;
+  syncWithGitHubNow: (silent?: boolean) => Promise<boolean>;
+  loadFromGitHubNow: () => Promise<boolean>;
+  exportLocalJson: () => void;
+  importLocalJson: (file: File) => Promise<boolean>;
 }
 
 const StateContext = createContext<StateContextType | undefined>(undefined);
@@ -95,7 +103,14 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               ...(parsed.systemSettings || {})
             },
             activeTab: parsed.activeTab || 'dashboard',
-            isLoggedIn: parsed.isLoggedIn !== undefined ? parsed.isLoggedIn : true
+            isLoggedIn: false, // O site sempre abre pela tela de login ao ser acessado
+            githubConfig: parsed.githubConfig || {
+              repo: '',
+              token: '',
+              branch: 'main',
+              path: 'data/database.json',
+              autoSync: false,
+            }
           };
         }
       } catch (e) {
@@ -113,7 +128,14 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       currentUserId: 'usr_admin_1',
       systemSettings: defaultSystemSettings,
       activeTab: 'dashboard',
-      isLoggedIn: true
+      isLoggedIn: false, // O site sempre abre pela tela de login ao ser acessado
+      githubConfig: {
+        repo: '',
+        token: '',
+        branch: 'main',
+        path: 'data/database.json',
+        autoSync: false,
+      }
     };
   });
 
@@ -473,6 +495,8 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const newAction: WorkPlanAction = {
       ...actionData,
       id: newId,
+      responsible: actionData.responsible || currentUser.name,
+      responsibleId: actionData.responsibleId || currentUser.id,
       microactionsList: actionData.microactionsList || ensureMicroactionsList({ ...actionData, id: newId } as WorkPlanAction)
     };
     setState(prev => ({
@@ -904,6 +928,138 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [autoSyncEnabled, driveToken]);
 
+  // GitHub Sync State
+  const [isSyncingGitHub, setIsSyncingGitHub] = useState(false);
+
+  const updateGitHubConfig = (newConfig: Partial<GitHubConfig>) => {
+    setState(prev => ({
+      ...prev,
+      githubConfig: {
+        ...(prev.githubConfig || {}),
+        ...newConfig
+      }
+    }));
+  };
+
+  const syncWithGitHubNow = async (silent = false): Promise<boolean> => {
+    const config = stateRef.current.githubConfig;
+    if (!config || !config.repo || !config.token) {
+      if (!silent) {
+        alert('Configure o Repositório do GitHub e o Token de Acesso (PAT) para sincronizar.');
+      }
+      return false;
+    }
+
+    try {
+      setIsSyncingGitHub(true);
+      const result = await saveStateToGitHub(config, stateRef.current);
+      if (result.success) {
+        setState(prev => ({
+          ...prev,
+          githubConfig: {
+            ...(prev.githubConfig || {}),
+            lastSync: result.timestamp,
+            lastStatus: 'success'
+          }
+        }));
+        if (!silent) {
+          alert('✅ Base de dados salva com sucesso no GitHub!');
+        }
+        return true;
+      } else {
+        setState(prev => ({
+          ...prev,
+          githubConfig: {
+            ...(prev.githubConfig || {}),
+            lastStatus: 'error'
+          }
+        }));
+        if (!silent) {
+          alert(`❌ ${result.message}`);
+        }
+        return false;
+      }
+    } catch (err: any) {
+      if (!silent) {
+        alert(`❌ Erro ao salvar no GitHub: ${err.message}`);
+      }
+      return false;
+    } finally {
+      setIsSyncingGitHub(false);
+    }
+  };
+
+  const loadFromGitHubNow = async (): Promise<boolean> => {
+    const config = stateRef.current.githubConfig;
+    if (!config || !config.repo) {
+      alert('Informe o repositório do GitHub (ex: usuario/repositorio) nas configurações para carregar.');
+      return false;
+    }
+
+    try {
+      setIsSyncingGitHub(true);
+      const result = await loadStateFromGitHub(config);
+      if (result.success && result.data) {
+        setState(prev => ({
+          ...prev,
+          ...(result.data as Partial<StrategicState>),
+          activeTab: prev.activeTab,
+          isLoggedIn: prev.isLoggedIn,
+          githubConfig: {
+            ...(prev.githubConfig || {}),
+            lastSync: new Date().toLocaleTimeString('pt-BR') + ' (' + new Date().toLocaleDateString('pt-BR') + ')',
+            lastStatus: 'success'
+          }
+        }));
+        alert('🔄 Base de dados carregada com sucesso do GitHub! Seus dados foram atualizados.');
+        return true;
+      } else {
+        alert(`❌ ${result.message}`);
+        return false;
+      }
+    } catch (err: any) {
+      alert(`❌ Erro ao carregar do GitHub: ${err.message}`);
+      return false;
+    } finally {
+      setIsSyncingGitHub(false);
+    }
+  };
+
+  const exportLocalJson = () => {
+    downloadLocalJsonBackup(stateRef.current, `crateus_gestao_base_${new Date().toISOString().slice(0, 10)}.json`);
+  };
+
+  const importLocalJson = async (file: File): Promise<boolean> => {
+    try {
+      const data = await readJsonBackupFile(file);
+      if (data && (data.schools || data.goals || data.projects)) {
+        setState(prev => ({
+          ...prev,
+          ...(data as Partial<StrategicState>),
+          activeTab: prev.activeTab,
+          isLoggedIn: prev.isLoggedIn
+        }));
+        alert('✅ Arquivo de backup restaurado com sucesso! Todos os dados foram atualizados.');
+        return true;
+      } else {
+        alert('⚠️ O arquivo JSON selecionado não possui a estrutura da plataforma de gestão.');
+        return false;
+      }
+    } catch (err: any) {
+      alert(`❌ Erro ao importar arquivo: ${err.message}`);
+      return false;
+    }
+  };
+
+  // GitHub Auto-Sync debounced
+  useEffect(() => {
+    if (!state.githubConfig?.autoSync || !state.githubConfig?.token || !state.githubConfig?.repo) return;
+    const timer = setTimeout(() => {
+      syncWithGitHubNow(true);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [state.schools, state.goals, state.projects, state.visits, state.formations, state.fairs, state.teamUsers, state.githubConfig?.autoSync]);
+
   return (
     <StateContext.Provider value={{
       state,
@@ -957,7 +1113,13 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       connectToDrive,
       disconnectFromDrive,
       saveToDriveNow,
-      loadFromDriveNow
+      loadFromDriveNow,
+      isSyncingGitHub,
+      updateGitHubConfig,
+      syncWithGitHubNow,
+      loadFromGitHubNow,
+      exportLocalJson,
+      importLocalJson
     }}>
       {children}
     </StateContext.Provider>

@@ -8,7 +8,7 @@ import {
   Users, Wrench, School as SchoolIcon, Edit2, Trash2, Globe, Wifi, Check, Plus, 
   BookOpen, Network, ShieldCheck, Cloud, CloudUpload, CloudDownload, Database, Zap,
   AlertTriangle, X, ChevronDown, ChevronUp, Calendar, User as UserIcon, Tag, Activity, ListTodo, CheckCircle2, Circle, Clock, Target, Eye,
-  Building2, Image, UserCheck
+  Building2, Image, UserCheck, Github, FileDown, FileUp, KeyRound, ExternalLink, Info
 } from 'lucide-react';
 
 type SubTabType = 'actions' | 'projects' | 'visits' | 'formations' | 'fairs' | 'new-goal' | 'schools' | 'users' | 'coordenadoria' | 'cloud-sync';
@@ -55,11 +55,32 @@ export const ManageTab: React.FC = () => {
     connectToDrive,
     disconnectFromDrive,
     saveToDriveNow,
-    loadFromDriveNow
+    loadFromDriveNow,
+    isSyncingGitHub,
+    updateGitHubConfig,
+    syncWithGitHubNow,
+    loadFromGitHubNow,
+    exportLocalJson,
+    importLocalJson
   } = useStrategicState();
 
   const [activeSubTab, setActiveSubTab] = useState<SubTabType>((state.activeSubTab as SubTabType) || 'actions');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // GitHub subtab state
+  const [ghRepoInput, setGhRepoInput] = useState(state.githubConfig?.repo || '');
+  const [ghTokenInput, setGhTokenInput] = useState(state.githubConfig?.token || '');
+  const [ghBranchInput, setGhBranchInput] = useState(state.githubConfig?.branch || 'main');
+  const [ghAutoSyncInput, setGhAutoSyncInput] = useState(state.githubConfig?.autoSync || false);
+
+  useEffect(() => {
+    if (state.githubConfig) {
+      setGhRepoInput(state.githubConfig.repo || '');
+      setGhTokenInput(state.githubConfig.token || '');
+      setGhBranchInput(state.githubConfig.branch || 'main');
+      setGhAutoSyncInput(state.githubConfig.autoSync || false);
+    }
+  }, [state.githubConfig]);
 
   useEffect(() => {
     if (state.activeSubTab) {
@@ -824,7 +845,7 @@ export const ManageTab: React.FC = () => {
             else if (tab === 'schools') { label = 'Gerenciar Escolas'; icon = <SchoolIcon className="h-4 w-4" />; }
             else if (tab === 'users') { label = 'Equipe & Permissões'; icon = <UserCheck className="h-4 w-4" />; }
             else if (tab === 'coordenadoria') { label = 'Logo & Responsável'; icon = <Building2 className="h-4 w-4" />; }
-            else if (tab === 'cloud-sync') { label = 'Google Drive Nuvem'; icon = <Cloud className="h-4 w-4" />; }
+            else if (tab === 'cloud-sync') { label = 'Nuvem, GitHub & Backup'; icon = <Database className="h-4 w-4" />; }
 
             return (
               <button
@@ -2772,158 +2793,280 @@ export const ManageTab: React.FC = () => {
             </div>
           )}
 
-          {/* 7. CLOUD SYNC & BACKUP MANAGEMENT */}
+          {/* 7. CLOUD SYNC, GITHUB & BACKUP MANAGEMENT */}
           {activeSubTab === 'cloud-sync' && (
-            <div className="space-y-6 animate-fade-in" id="form-cloud-sync">
+            <div className="space-y-8 animate-fade-in" id="form-cloud-sync">
+              
+              {/* Header */}
               <div className="border-b border-slate-200/80 pb-4">
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div>
-                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                      <Cloud className="h-5 w-5 text-blue-600" />
-                      Sincronização na Nuvem com Google Drive
+                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2 uppercase tracking-tight">
+                      <Database className="h-5 w-5 text-blue-600" />
+                      Central de Persistência, GitHub e Backup em Nuvem
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Proteção automática contra perda de dados da Secretaria de Educação</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Configure a gravação automática no repositório do GitHub, conexão com Google Drive ou faça download de arquivos .JSON
+                    </p>
                   </div>
-                  {isDriveConnected && (
-                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 border border-emerald-200">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-                      Conectado: {user?.email}
-                    </span>
-                  )}
                 </div>
               </div>
 
-              {!isDriveConnected ? (
-                <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 rounded-2xl p-6 sm:p-8 text-white shadow-lg space-y-5 text-center">
-                  <div className="w-14 h-14 bg-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center mx-auto border border-blue-400/30">
-                    <Cloud className="h-8 w-8 animate-bounce" />
+              {/* 1. SEÇÃO PRINCIPAL: PERSISTÊNCIA NA BASE DO GITHUB */}
+              <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 rounded-3xl p-6 text-white shadow-lg space-y-6 border border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-white/10 rounded-2xl border border-white/10 text-white">
+                      <Github className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm sm:text-base text-white flex items-center gap-2">
+                        Base de Dados no Repositório do GitHub
+                        {state.githubConfig?.repo && (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                            Ativo
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-slate-300">
+                        Salva todos os cadastros e alterações no arquivo <code className="text-yellow-300 font-mono">public/data/crateus_database.json</code> via API do GitHub.
+                      </p>
+                    </div>
                   </div>
-                  <div className="max-w-md mx-auto space-y-2">
-                    <h4 className="font-bold text-lg text-white">Conecte seu Google Drive para Salvar na Nuvem</h4>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Ao autorizar o acesso, a plataforma criará um arquivo seguro chamado <strong className="text-yellow-300 font-mono">crateus_gestao_estrategica_backup.json</strong> no seu Drive. Sempre que você fizer alterações ou fechar o navegador, seus dados estarão a salvo.
-                    </p>
-                  </div>
-                  <div className="pt-2">
+
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={connectToDrive}
-                      disabled={isSyncingDrive}
-                      className="inline-flex items-center gap-3 bg-white text-slate-900 hover:bg-slate-100 font-extrabold px-6 py-3 rounded-xl shadow-md transition-all cursor-pointer text-xs disabled:opacity-70"
+                      onClick={() => syncWithGitHubNow()}
+                      disabled={isSyncingGitHub}
+                      className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer disabled:opacity-50"
                     >
-                      {isSyncingDrive ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
-                          <span>Conectando com Google...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
-                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                            <path fill="none" d="M0 0h48v48H0z" />
-                          </svg>
-                          <span>Autorizar e Conectar Google Drive</span>
-                        </>
-                      )}
+                      {isSyncingGitHub ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CloudUpload className="h-3.5 w-3.5" />}
+                      <span>Salvar no GitHub Agora</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Carregar dados mais recentes do repositório do GitHub? Alterações locais não salvas serão substituídas.')) {
+                          loadFromGitHubNow();
+                        }
+                      }}
+                      disabled={isSyncingGitHub}
+                      className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-bold px-4 py-2.5 rounded-xl text-xs border border-white/20 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <CloudDownload className="h-3.5 w-3.5 text-blue-300" />
+                      <span>Carregar do GitHub</span>
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-                        <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
-                        <span>Sincronização Automática</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (!autoSyncEnabled) {
-                            if (window.confirm('Ativar Sincronização Automática com o Google Drive?\n\nIsso garantirá que cada nova alteração ou ao sair/fechar a janela, os dados sejam salvos diretamente no seu arquivo de backup na nuvem.')) {
-                              setAutoSyncEnabled(true);
-                              saveToDriveNow(true);
-                            }
-                          } else {
-                            setAutoSyncEnabled(false);
-                          }
-                        }}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                          autoSyncEnabled ? 'bg-emerald-600' : 'bg-slate-300'
-                        }`}
-                      >
-                        <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                          autoSyncEnabled ? 'translate-x-5' : 'translate-x-0'
-                        }`} />
-                      </button>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {autoSyncEnabled 
-                        ? '🟢 A sincronização automática está ATIVADA. Todas as suas ações, metas e visitas técnicas são salvas em segundo plano sem que você precise clicar em nada.'
-                        : '⚪ A sincronização automática está DESATIVADA. Para que os dados não se percam ao fechar a janela, recomendamos ativar esta opção ou clicar em "Salvar Agora" manualmente.'}
-                    </p>
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-[11px] text-slate-500">
-                      Última sincronização confirmada: <strong className="text-slate-800">{lastDriveSync || 'Nenhuma nesta sessão'}</strong>
-                    </div>
+
+                {/* GitHub Configuration Form */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    updateGitHubConfig({
+                      repo: ghRepoInput.trim(),
+                      token: ghTokenInput.trim(),
+                      branch: ghBranchInput.trim() || 'main',
+                      autoSync: ghAutoSyncInput
+                    });
+                    triggerSuccess('Configuração do GitHub salva! A base sincronizará automaticamente com seu repositório.');
+                  }}
+                  className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                >
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Repositório (usuario/repositorio)
+                    </label>
+                    <input
+                      type="text"
+                      value={ghRepoInput}
+                      onChange={(e) => setGhRepoInput(e.target.value)}
+                      placeholder="ex: seu-usuario/crateus-gestao"
+                      className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-400 font-mono"
+                    />
                   </div>
 
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Personal Access Token (PAT)
+                    </label>
+                    <input
+                      type="password"
+                      value={ghTokenInput}
+                      onChange={(e) => setGhTokenInput(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxx"
+                      className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-400 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Branch do Repositório
+                    </label>
+                    <input
+                      type="text"
+                      value={ghBranchInput}
+                      onChange={(e) => setGhBranchInput(e.target.value)}
+                      placeholder="main"
+                      className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-400 font-mono"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3 flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-white/10">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={ghAutoSyncInput}
+                        onChange={(e) => setGhAutoSyncInput(e.target.checked)}
+                        className="rounded border-white/20 text-emerald-500 focus:ring-emerald-500"
+                      />
+                      <span className="text-xs text-slate-300 font-semibold">
+                        Sincronizar no GitHub automaticamente sempre que alterar ou cadastrar algo
+                      </span>
+                    </label>
+
+                    <button
+                      type="submit"
+                      className="bg-white text-slate-900 hover:bg-slate-100 font-black text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer transition-all uppercase tracking-wider"
+                    >
+                      Salvar Credenciais do GitHub
+                    </button>
+                  </div>
+                </form>
+
+                {state.githubConfig?.lastSync && (
+                  <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    Última sincronização no GitHub: <span className="text-white font-bold">{state.githubConfig.lastSync}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. SEÇÃO: GOOGLE DRIVE & ORIENTAÇÃO DO GITHUB PAGES */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+                      <Cloud className="h-6 w-6" />
+                    </div>
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2 mb-2">
-                        <Database className="h-4 w-4 text-blue-600" />
-                        Ações Manuais no Backup
+                      <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                        Backup no Google Drive
+                        {isDriveConnected && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                            Conectado: {user?.email}
+                          </span>
+                        )}
                       </h4>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        Você também pode forçar um salvamento imediato ou restaurar dados de uma sessão anterior no seu Google Drive a qualquer momento.
+                      <p className="text-xs text-slate-500">
+                        Gera e atualiza o arquivo <strong className="font-mono text-slate-700">crateus_gestao_estrategica_backup.json</strong> no seu Drive pessoal.
                       </p>
                     </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                      <button
-                        onClick={() => {
-                          if (window.confirm('Deseja salvar e atualizar agora o arquivo "crateus_gestao_estrategica_backup.json" no Google Drive com os dados exibidos?')) {
-                            saveToDriveNow(false);
-                          }
-                        }}
-                        disabled={isSyncingDrive}
-                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-70"
-                      >
-                        <CloudUpload className="h-4 w-4" />
-                        <span>Salvar no Drive Agora</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          if (window.confirm('Atenção: Restaurar do Google Drive substituirá os dados atuais na tela pelos do último backup na nuvem. Deseja prosseguir?')) {
-                            loadFromDriveNow();
-                          }
-                        }}
-                        disabled={isSyncingDrive}
-                        className="flex-1 flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2.5 px-3 rounded-xl text-xs transition-colors border border-blue-200 cursor-pointer disabled:opacity-70"
-                      >
-                        <CloudDownload className="h-4 w-4" />
-                        <span>Restaurar Backup</span>
-                      </button>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 text-right">
-                      <button
-                        onClick={() => {
-                          if (window.confirm('Desconectar a conta do Google Drive?')) {
-                            disconnectFromDrive();
-                          }
-                        }}
-                        className="text-[11px] font-bold text-red-600 hover:text-red-700 underline"
-                      >
-                        Desconectar Conta Google
-                      </button>
-                    </div>
                   </div>
 
+                  <div>
+                    {!isDriveConnected ? (
+                      <button
+                        onClick={connectToDrive}
+                        disabled={isSyncingDrive}
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-sm cursor-pointer transition-all disabled:opacity-50"
+                      >
+                        <Cloud className="h-3.5 w-3.5" />
+                        <span>Conectar Google Drive</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => saveToDriveNow(false)}
+                          disabled={isSyncingDrive}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl cursor-pointer transition-all"
+                        >
+                          Salvar no Drive
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Carregar dados do Google Drive? Substituirá os dados da tela.')) {
+                              loadFromDriveNow();
+                            }
+                          }}
+                          disabled={isSyncingDrive}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3.5 py-2 rounded-xl border border-blue-200 cursor-pointer transition-all"
+                        >
+                          Restaurar
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Desconectar a conta do Google Drive?')) {
+                              disconnectFromDrive();
+                            }
+                          }}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-bold underline ml-2 cursor-pointer"
+                        >
+                          Desconectar
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                {/* Dica para o usuário sobre o erro de autorização no GitHub Pages */}
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 text-amber-900">
+                  <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <strong className="block font-bold">Aviso importante para o Google Drive no GitHub Pages:</strong>
+                    <p className="text-amber-800 leading-relaxed">
+                      Se você estiver acessando pelo link do GitHub Pages (ex: <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-900">usuario.github.io</code>) e a tela de login do Google fechar com erro de domínio não autorizado, basta adicionar o endereço do seu GitHub Pages em <strong>Firebase Console &gt; Authentication &gt; Settings &gt; Authorized Domains</strong>.
+                    </p>
+                    <p className="text-amber-800 leading-relaxed">
+                      Enquanto isso, a <strong>Base de Dados do GitHub</strong> e o <strong>Backup em Arquivo .JSON</strong> funcionam 100% diretamente sem depender de autorização de domínio!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. SEÇÃO: BACKUP E RESTAURAÇÃO LOCAL (.JSON) */}
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                      <FileDown className="h-5 w-5 text-slate-700" />
+                      Backup Offline em Arquivo Local (.JSON)
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Baixe uma cópia completa dos dados para o seu computador ou carregue um arquivo existente a qualquer momento.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={exportLocalJson}
+                      className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                    >
+                      <FileDown className="h-4 w-4 text-emerald-400" />
+                      <span>Baixar Arquivo .JSON</span>
+                    </button>
+
+                    <label className="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl border border-slate-300 shadow-2xs transition-all cursor-pointer">
+                      <FileUp className="h-4 w-4 text-blue-600" />
+                      <span>Restaurar de Arquivo .JSON</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (window.confirm(`Deseja carregar os dados contidos no arquivo "${file.name}"?`)) {
+                              importLocalJson(file);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
 
